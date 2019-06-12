@@ -21,7 +21,7 @@ class conv_bn(nn.Module):
         return F.leaky_relu(self.bn(self.conv(x)), negative_slope=0.1, inplace=True)
     
     
-class DarknetBlock(nn.Module):  #   1*1  减少通道数   3*3增加通道
+class DarknetBlock(nn.Module):  #   1*1  减少通道�?  3*3增加通道
     def __init__(self,in_planes):
         super().__init__()
         mid_ch = in_planes // 2
@@ -56,13 +56,15 @@ class loss_layer(nn.Module):
         
         self.ignore_threshold = 0.5
         self.lambda_xy = 1.
-        self.lambda_coors = 1.
+        self.lambda_coors = 3.
         self.lambda_conf = 5.0
         self.lambda_cls = 1.0
 
         self.mse_loss = nn.MSELoss()
         self.bce_loss = nn.BCELoss()
+        self.ce_loss = nn.CrossEntropyLoss()
         self.smmoth_l1_loss = nn.SmoothL1Loss()
+        
         self.img_size = img_size
         
     def forward(self, fms, targets):
@@ -81,6 +83,7 @@ class loss_layer(nn.Module):
         # Get outputs
         x = torch.sigmoid(prediction[..., 8])          # Center x
         y = torch.sigmoid(prediction[..., 9])          # Center y
+        
         x1 = prediction[..., 0]
         y1 = prediction[..., 1]
         x2 = prediction[..., 2]
@@ -89,11 +92,10 @@ class loss_layer(nn.Module):
         y3 = prediction[..., 5]
         x4 = prediction[..., 6]
         y4 = prediction[..., 7]
-        print('x:',x.shape)
-        
 
         conf = torch.sigmoid(prediction[..., 10])       # Conf
         pred_cls = torch.sigmoid(prediction[..., 11:]) # Cls pred.
+        pred_cls = prediction[..., 11:] # Cls pred.
         
       
             #  build target
@@ -104,14 +106,23 @@ class loss_layer(nn.Module):
         mask, conf_mask = mask.byte().cuda(), conf_mask.byte().cuda()
         tx, ty = tx.cuda(), ty.cuda()
         tx1, ty1, tx2, ty2, tx3, ty3, tx4, ty4 = tx1.cuda(), ty1.cuda(), tx2.cuda(), ty2.cuda(), tx3.cuda(), ty3.cuda(), tx4.cuda(), ty4.cuda()
-        tconf, tcls = tconf.cuda(), tcls.cuda()
-        print('tx:',tx.shape)
+        tconf, tcls = tconf.cuda(), tcls.long().cuda()
+                                          
         conf_mask_true = mask
         conf_mask_false = conf_mask - mask
                                   
         #  losses.
         loss_x = self.bce_loss(x[mask==1], tx[mask==1]) * self.lambda_xy
         loss_y = self.bce_loss(y[mask==1], ty[mask==1]) * self.lambda_xy
+        
+#        loss_x1 = self.mse_loss(x1[mask==1], tx1[mask==1]) * self.lambda_coors
+#        loss_y1 = self.mse_loss(y1[mask==1], ty1[mask==1]) * self.lambda_coors 
+#        loss_x2 = self.mse_loss(x2[mask==1], tx2[mask==1]) * self.lambda_coors
+#        loss_y2 = self.mse_loss(y2[mask==1], ty2[mask==1]) * self.lambda_coors 
+#        loss_x3 = self.mse_loss(x3[mask==1], tx3[mask==1]) * self.lambda_coors
+#        loss_y3 = self.mse_loss(y3[mask==1], ty3[mask==1]) * self.lambda_coors 
+#        loss_x4 = self.mse_loss(x4[mask==1], tx4[mask==1]) * self.lambda_coors
+#        loss_y4 = self.mse_loss(y4[mask==1], ty4[mask==1]) * self.lambda_coors 
         
         loss_x1 = self.smmoth_l1_loss(x1[mask==1], tx1[mask==1]) * self.lambda_coors
         loss_y1 = self.smmoth_l1_loss(y1[mask==1], ty1[mask==1]) * self.lambda_coors 
@@ -124,7 +135,9 @@ class loss_layer(nn.Module):
         
         loss_conf = self.bce_loss(conf[conf_mask_true], tconf[conf_mask_true]) +\
                     self.bce_loss(conf[conf_mask_false], tconf[conf_mask_false])
-        loss_cls = self.bce_loss(pred_cls[mask==1],tcls[mask==1]) * self.lambda_cls
+        #loss_cls = self.bce_loss(pred_cls[mask==1],tcls[mask==1]) * self.lambda_cls
+        
+        loss_cls = self.ce_loss(pred_cls[mask==1],tcls[mask==1]) * self.lambda_cls
         
         loss = loss_x  + loss_y  + loss_x1  + loss_y1 + loss_x2 + loss_y2 + loss_x3 + loss_y3 + loss_x4 + loss_y4 + loss_conf  + loss_cls 
 

@@ -39,7 +39,6 @@ def resize(img, boxes, size, max_size=1000):
         ow, oh = size
         sw = float(ow) / w
         sh = float(oh) / h
-        
     img = img.resize((ow,oh), Image.BILINEAR)
     boxes[:,:-1] = boxes[:,:-1]*torch.Tensor([sw,sh,sw,sh,sw,sh,sw,sh,sw,sh])
     tmp_boxes = boxes[:,:8]
@@ -52,8 +51,6 @@ def resize(img, boxes, size, max_size=1000):
     boxes[:,8] = tmp_boxes[:,[0,2,4,6]].sum(1) / 4.
     boxes[:,9] = tmp_boxes[:,[1,3,5,7]].sum(1) / 4.
     boxes[:,:8] = tmp_boxes
-    
-    
     
     return img, boxes
            
@@ -114,8 +111,6 @@ def random_flip_updown(img, boxes):
     boxes[:,8] = tmp_boxes[:,[0,2,4,6]].sum(1) / 4.
     boxes[:,9] = tmp_boxes[:,[1,3,5,7]].sum(1) / 4.
     boxes[:,:8] = tmp_boxes
-	
-	
     return img, boxes   
 
     
@@ -133,7 +128,7 @@ def random_crop(img, boxes):
     success = False
     for attempt in range(10):
         area = img.size[0] * img.size[1]
-        target_area = random.uniform(0.8, 1.0) * area
+        target_area = random.uniform(0.9, 1.0) * area
         aspect_ratio = random.uniform(3. / 4, 4. / 3)
 
         w = int(round(math.sqrt(target_area * aspect_ratio)))

@@ -29,6 +29,6 @@ def get_best_begin_point(coordinate):
         if temp_force < force:
             force = temp_force
             force_flag = i
-    if force_flag != 0:
-        print("choose one direction!")
+    #if force_flag != 0:
+        #print("choose one direction!")
     return combinate[force_flag]

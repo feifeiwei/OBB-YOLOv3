@@ -5,6 +5,7 @@ Created on Tue Feb 19 11:12:14 2019
 @author: 60236
 """
 import cv2
+import glob
 import numpy as np
 import os
 import random
@@ -17,11 +18,11 @@ import torch
 from torch.utils.data import DataLoader
 
 import matplotlib.pyplot as plt
-#import matplotlib.patches as patches
-#from matplotlib.ticker import NullLocator
+import matplotlib.patches as patches
+from matplotlib.ticker import NullLocator
 
 from module.model import yolov3
-from datasets.datasets import ImageFolder
+from datasets.datasets import ImageFolder2
 from utils.utils import non_max_suppression
 from config import *
 import torchvision.transforms as transforms
@@ -46,7 +47,9 @@ model = yolov3(cfg['img_shape'], cfg['anchors'], cfg['num_classes']).to(device)
 checkpoint = torch.load(r'./checkpoints/%s'%(cfg['save_name']))
 model.load_state_dict(checkpoint['weights'])
 print('loading model weights success')
-  
+
+if cuda:
+    model.cuda()    
 model.eval()
 
 transform = transforms.Compose([
@@ -54,46 +57,42 @@ transform = transforms.Compose([
     transforms.Normalize((0.485,0.456,0.406), (0.229,0.224,0.225))
 ])
 
-dataloader = DataLoader(ImageFolder(cfg['test_path'], img_size=cfg['img_shape'],transform=transform),
-                        batch_size=opt.batch_size, shuffle=False)
+img_root = r'C:\Users\60236\Desktop\dota\1'
+dataloader = DataLoader(ImageFolder2(img_root, img_size=cfg['img_shape'],transform=transform),
+                        batch_size=1, shuffle=False)
 
 
-classes = ['b','s']  # Extracts class labels from file
+classes = ['small','big']  # Extracts class labels from file
 
 imgs = []           # Stores image paths
 img_detections = [] # Stores detections for each image index
 
-print ('\nPerforming object detection: %d samples...'%len(dataloader))
+print ('\nPerforming object detection: %d samples...'% len(dataloader))
 Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 prev_time = time.time()
 
-for batch_i, (img_paths, input_imgs) in enumerate(dataloader):
-    # Configure input
-    input_imgs = input_imgs.type(Tensor)
-
-    # Get detections
+for batch_i, (image_path, input_img) in enumerate(dataloader):
+    img = input_img.float().cuda()
     with torch.no_grad():
-        detections = model(input_imgs)  ### 8 + 2 + 1 + cls
-        # 8 + 2 + cls + 4_bits
-        detections = non_max_suppression(detections, cfg["num_classes"], conf_thres=opt.conf_thres, nms_thres=opt.nms_thres)  ##0-7: 8bit coors, 8: conf, 9:cls_conf, 10: class, 11-14: 4bit coors.
-    # Log progress
+        detections = model(img)  ### 8 + 2 + 1 + cls
+        detections = non_max_suppression(detections, cfg["num_classes"], conf_thres=opt.conf_thres, nms_thres=opt.nms_thres)
+    
     current_time = time.time()
     inference_time = datetime.timedelta(seconds=current_time - prev_time)
     prev_time = current_time
     print ('\t+ Batch %d, Inference Time: %s' % (batch_i, inference_time))
 
     # Save image and detections
-    imgs.extend(img_paths)
+    imgs.extend(image_path)
     img_detections.extend(detections)
-    break
     
 # Bounding-box colors
 cmap = plt.get_cmap('tab20b')
-colors = [cmap(i) for i in np.linspace(0, 1, 20)][1:]
-
+colors = [cmap(i) for i in np.linspace(0, 1, 20)]
 
 bbox_colors = random.sample(colors, cfg["num_classes"])
 print ('\nSaving images:')
+
 
 for img_i, (path, detections) in enumerate(zip(imgs, img_detections)):
 #
@@ -102,8 +101,8 @@ for img_i, (path, detections) in enumerate(zip(imgs, img_detections)):
     img = np.array(Image.open(path))
     img_name = path.split(" ")[0].split("\\")[-1]
     
-    pad_x = max(img.shape[0] - img.shape[1],0) * (cfg['img_shape'] / max(img.shape))
-    pad_y = max(img.shape[1] - img.shape[0],0) * (cfg['img_shape'] / max(img.shape))
+    pad_x = max(img.shape[0] - img.shape[1],0) * (1920 / max(img.shape))
+    pad_y = max(img.shape[1] - img.shape[0],0) * (1920 / max(img.shape))
     
     unpad_h = cfg['img_shape'] - pad_y
     unpad_w = cfg['img_shape'] - pad_x
@@ -123,16 +122,25 @@ for img_i, (path, detections) in enumerate(zip(imgs, img_detections)):
             coor = coor.reshape((-1,1,2)).cpu().numpy().astype(np.int32)
             label = memo[10].item()
             color = bbox_colors[int(np.where(unique_labels == int(label))[0])]
-            color_ = [[0,255,0],[255,0,0]]
-            img = cv2.polylines(img, [coor], True, color_[int(label)], thickness=2)
-           # cls_conf = memo[8].item()
+            color = tuple(i*255 for i in color)
+            img = cv2.polylines(img, [coor], True, (0,255,0), thickness=2)
+            cls_conf = memo[8].item()
             
-            #cv2.putText(img, classes[int(label)], tuple(coor[0][0]), cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5, color=color)
+            cv2.putText(img, classes[int(label)], tuple(coor[0][0]), cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5, color=color)
             
-        cv2.imwrite(r'output\%s'%(img_name), img)
-            
-        
+        cv2.imwrite('output/%s'%(img_name), img)
+    
+    
+    
+    
+    
+    
 
-       
-        
-  
+
+
+
+
+
+
+
+

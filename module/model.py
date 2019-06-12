@@ -101,7 +101,7 @@ class yolo(nn.Module):
             
             ret = []
             for i in zip(loss_0,loss_1,loss_2):
-                ret.append( sum(i))
+                ret.append(sum(i))
             return ret
     
     def load_weights(self, base_file):
@@ -162,7 +162,7 @@ if __name__=="__main__":
                 [(30, 61), (62, 45), (59, 119)], 
                 [(10, 13), (16, 30), (33, 23)]]
     
-    shape = 800
+    shape = 416
     x = torch.randn(1,3,shape,shape)
     n = yolov3(shape, anchors, 20, cuda=False)
 #    n.load_weights('./weights/darkNet53.pth')

@@ -15,7 +15,7 @@ import cv2
 
 class ImageFolder2(Dataset):
     def __init__(self, folder_path, img_size=256, transform=None):
-        self.files = sorted(glob.glob(r'./%s/*.*' % folder_path))  #5011 pics
+        self.files = sorted(glob.glob(r'%s/*.png' % folder_path))  #5011 pics
         self.img_shape = (img_size, img_size)
         self.transform = transform
     def __getitem__(self,index):
@@ -93,14 +93,14 @@ class ListDataset(Dataset):
             img_path, input_img, filled_labels[x1 y1 x2 y2 x3 y3 x4 y4 pieces...]
     '''
     def __init__(self,list_path, img_size=416, transform=None, train=True):
-        with open(list_path,'r') as file:
-            files = file.readlines()
+        with open(list_path,'r') as f:
+            files = f.readlines()
             self.num_samples = len(files)
         files = [i.strip() for i in files]
         self.img_files = [i.split(' ')[0] for i in files]
         self.label_files = [i.split(' ')[1:] for i in files]
         self.img_shape = (img_size, img_size)
-        self.max_objects = 100
+        self.max_objects = 200
         self.transform = transform
         self.train = train
         
@@ -136,7 +136,6 @@ class ListDataset(Dataset):
         y4 = labels[:,7]
         c = labels[:,8]
 
-        ####对了  
 #        x1,y1,x2,y2 = x1/ratio_, y1/ratio_, x2/ratio_, y2/ratio_
         
         boxes = np.zeros((x1.shape[0],11))
@@ -148,7 +147,7 @@ class ListDataset(Dataset):
         boxes[:,5] = y3
         boxes[:,6] = x4
         boxes[:,7] = y4
-        ##中心点
+
         boxes[:,8] = boxes[:,[0,2,4,6]].sum(1) / 4.
         boxes[:,9] = boxes[:,[1,3,5,7]].sum(1) / 4.
         boxes[:,10] = c
@@ -161,13 +160,11 @@ class ListDataset(Dataset):
             input_img, boxes = random_flip_updown(input_img, boxes)
             input_img, boxes = random_crop(input_img, boxes)
             input_img, boxes = resize(input_img, boxes,self.img_shape)
-        else:
-            input_img, boxes = resize(input_img, boxes,self.img_shape)
             
 #        
 #        
 #        #---------------------------------------------------------------------------
-         #Calculate ratios from coordinates坐标都除以图像宽度归一化#        
+         #Calculate ratios from coordinates
         boxes[:,0] /= self.img_shape[0]
         boxes[:,1] /= self.img_shape[0]
         boxes[:,2] /= self.img_shape[0]

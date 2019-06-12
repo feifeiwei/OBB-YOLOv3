@@ -21,7 +21,7 @@ def predict_transform(fms, inp_dim, anchors, num_classes, cuda=False):
     #[?,169*3,85]
     prediction = prediction.view(batch_size, -1, bbox_attrs)   #?, 507,31
     
-    #Sigmoid the  centre_X, centre_Y. and object confidencce  ##0-7坐标 ； 8，9 中心  10 conf
+    #Sigmoid the  centre_X, centre_Y. and object confidencce  ##0-7  10 conf
     prediction[:,:,8] = torch.sigmoid(prediction[:,:,8])  #?,507
     prediction[:,:,9] = torch.sigmoid(prediction[:,:,9])
     prediction[:,:,10] = torch.sigmoid(prediction[:,:,10])
@@ -42,8 +42,9 @@ def predict_transform(fms, inp_dim, anchors, num_classes, cuda=False):
     if cuda:
         x_y_offset = x_y_offset.cuda()
         anchors = anchors.cuda()
-    prediction[...,8:10] += x_y_offset  #加上偏置  【?, 507, 2】
-#    prediction[...,0:8] = torch.exp(prediction[:,:,0:8])*anchors
+    
+    prediction[...,8:10] += x_y_offset  
+    #prediction[...,0:8] = torch.exp(prediction[:,:,0:8])*anchors
     prediction[...,0:8] = prediction[:,:,0:8] * anchors + x_y_offset.repeat(1,1,4)
     #Softmax the class scores
     prediction[...,11: 11 + num_classes] = torch.sigmoid((prediction[:,:, 11 : 11 + num_classes]))
@@ -110,8 +111,8 @@ def get_target( target, anchors, g_dim, ignore_threshold, num_classes):
     tx4 = torch.zeros(bs, nA, g_dim, g_dim)
     ty4 = torch.zeros(bs, nA, g_dim, g_dim)
     tconf = torch.zeros(bs, nA, g_dim, g_dim)
-    tcls = torch.zeros(bs, nA, g_dim, g_dim, num_classes)
-    #tcls = torch.zeros(bs, nA, g_dim, g_dim)
+    #tcls = torch.zeros(bs, nA, g_dim, g_dim, num_classes)
+    tcls = torch.zeros(bs, nA, g_dim, g_dim)
     
     for b in range(bs):
         for t in range(target.shape[1]):
@@ -147,6 +148,7 @@ def get_target( target, anchors, g_dim, ignore_threshold, num_classes):
             # Find the best matching anchor box
             best_n = np.argmax(anch_ious)
             # Masks
+    
             mask[b, best_n, gj, gi] = 1
             conf_mask[b, best_n, gj, gi] = 1
             # Coordinates
@@ -154,21 +156,28 @@ def get_target( target, anchors, g_dim, ignore_threshold, num_classes):
             ty[b, best_n, gj, gi] = gy - gj
             # Width and height
             
-            tx1[b, best_n, gj, gi] = (gx1 - gi) / anchors[best_n][0]
-            ty1[b, best_n, gj, gi] = (gy1 - gj) / anchors[best_n][1]
-            tx2[b, best_n, gj, gi] = (gx2 - gi) / anchors[best_n][0]
-            ty2[b, best_n, gj, gi] = (gy2 - gj) / anchors[best_n][1]
-            tx3[b, best_n, gj, gi] = (gx3 - gi) / anchors[best_n][0]
-            ty3[b, best_n, gj, gi] = (gy3 - gj) / anchors[best_n][1]
-            tx4[b, best_n, gj, gi] = (gx4 - gi) / anchors[best_n][0]
-            ty4[b, best_n, gj, gi] = (gy4 - gj) / anchors[best_n][1]
-            
-            
+            tx1[b, best_n, gj, gi] = torch.exp((gx1 - gi)/anchors[best_n][0] + 1e-16)
+            ty1[b, best_n, gj, gi] = torch.exp((gy1 - gj)/anchors[best_n][1] + 1e-16)
+            tx2[b, best_n, gj, gi] = torch.exp((gx2 - gi)/anchors[best_n][0] + 1e-16)
+            ty2[b, best_n, gj, gi] = torch.exp((gy2 - gj)/anchors[best_n][1] + 1e-16)
+            tx3[b, best_n, gj, gi] = torch.exp((gx3 - gi)/anchors[best_n][0] + 1e-16)
+            ty3[b, best_n, gj, gi] = torch.exp((gy3 - gj)/anchors[best_n][1] + 1e-16)
+            tx4[b, best_n, gj, gi] = torch.exp((gx4 - gi)/anchors[best_n][0] + 1e-16)
+            ty4[b, best_n, gj, gi] = torch.exp((gy4 - gj)/anchors[best_n][1] + 1e-16)
+#            
+#            tx1[b, best_n, gj, gi] = (gx1 - gi) / anchors[best_n][0]
+#            ty1[b, best_n, gj, gi] = (gy1 - gj) / anchors[best_n][1]
+#            tx2[b, best_n, gj, gi] = (gx2 - gi) / anchors[best_n][0]
+#            ty2[b, best_n, gj, gi] = (gy2 - gj) / anchors[best_n][1]
+#            tx3[b, best_n, gj, gi] = (gx3 - gi) / anchors[best_n][0]
+#            ty3[b, best_n, gj, gi] = (gy3 - gj) / anchors[best_n][1]
+#            tx4[b, best_n, gj, gi] = (gx4 - gi) / anchors[best_n][0]
+#            ty4[b, best_n, gj, gi] = (gy4 - gj) / anchors[best_n][1]
             
             # object
             tconf[b, best_n, gj, gi] = 1
             # One-hot encoding of label
-            tcls[b, best_n, gj, gi, int(target[b, t, 4])] = 1
-            #tcls[b, best_n, gj, gi] = int(target[b, t, 4])
+            #tcls[b, best_n, gj, gi, int(target[b, t, 10])] = 1
+            tcls[b, best_n, gj, gi] = int(target[b, t, 10])
             
     return mask, conf_mask, tx, ty, tx1, ty1, tx2, ty2,tx3, ty3,tx4, ty4, tconf, tcls   
