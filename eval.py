@@ -66,7 +66,6 @@ all_detections = []
 all_annotations = []
 
 for batch_i, (_, imgs, targets) in enumerate(tqdm.tqdm(dataloader, desc="Detecting objects")):
-    print(batch_i)
     # Configure input
     imgs = imgs.type(Tensor)
     targets = targets.type(Tensor)
@@ -91,8 +90,6 @@ for batch_i, (_, imgs, targets) in enumerate(tqdm.tqdm(dataloader, desc="Detecti
     coor_4bit = torch.zeros((coor_8bit.shape[0],coor_8bit.shape[1],4))
     for b, bit_8 in enumerate(coor_8bit):
         coor_4bit[b] = change_box_order(bit_8,'xiyi2xyxy')
-#        print(change_box_order(bit_8,'xiyi2xyxy'))
-#        print(bit_8)
      
     tmp = torch.cat((coor_4bit, targets[:,:,10:].cpu()),2)
     targets = tmp #[xm,ym,xmax,ymax, conf,cls_conf, class]
