@@ -18,7 +18,7 @@ from config import *
 import torchvision.transforms as transforms
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--conf_thres', type=float, default=0.5, help='object confidence threshold')
+parser.add_argument('--conf_thres', type=float, default=0.01, help='object confidence threshold')
 parser.add_argument('--nms_thres', type=float, default=0.1, help='iou thresshold for non-maximum suppression')
 parser.add_argument('--batch_size', type=int, default=1, help='size of the batches')
 parser.add_argument('--iou_thres', type=float, default=0.5, help='iou threshold required to qualify as detected')
