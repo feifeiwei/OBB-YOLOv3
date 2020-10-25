@@ -4,7 +4,7 @@ Created on Wed Jul 25 18:11:07 2018
 
 @author: 60236
 """
-
+import os
 import glob
 import numpy as np
 import torch
@@ -13,39 +13,9 @@ from PIL import Image
 from .augmentation import random_flip, random_flip_updown, resize, random_crop
 import cv2
 
-class ImageFolder2(Dataset):
-    def __init__(self, folder_path, img_size=256, transform=None):
-        self.files = sorted(glob.glob(r'%s/*.png' % folder_path))  #5011 pics
-        self.img_shape = (img_size, img_size)
-        self.transform = transform
-    def __getitem__(self,index):
-        image_path = self.files[index % len(self.files)]
-        #extract images
-        img = np.array(Image.open(image_path))  # h w 
-        h, w ,_ = img.shape
-        dim_diff = np.abs(h-w)
-        # Upper (left) and lower (right) padding
-        pad1, pad2 = dim_diff // 2, dim_diff // 2
-        #Determine padding
-        
-        pad = ((pad1, pad2), (0, 0), (0, 0)) if h <= w else ((0, 0), (pad1, pad2), (0, 0))
-        input_img = np.pad(img, pad, 'constant', constant_values=127.5) / 255.
-        # Resize and normalize
-        input_img = cv2.resize(input_img, self.img_shape, interpolation=cv2.INTER_CUBIC)
-        # Channels-first
-        if self.transform is not None:
-            input_img = self.transform(input_img)
-        else:
-            input_img = np.transpose(input_img, (2, 0, 1))
-            # As pytorch tensor
-            input_img = torch.from_numpy(input_img).float()
-
-        return image_path, input_img
-    def __len__(self):
-        return len(self.files)
     
 class ImageFolder(Dataset):
-    def __init__(self, folder_path, img_size=416,transform=None):
+    def __init__(self, root, folder_path, img_size=416,transform=None):
         self.img_shape = (img_size, img_size)
         self.transform = transform
         
@@ -53,7 +23,7 @@ class ImageFolder(Dataset):
             files = f.readlines()
             self.num_samples = len(files)
         files = [i.strip() for i in files]
-        self.img_files = [i.split(' ')[0] for i in files]
+        self.img_files = [os.path.join(root,i.split(' ')[0]) for i in files]
         
     def __getitem__(self,index):
         image_path = self.img_files[index % self.num_samples]
@@ -88,21 +58,22 @@ class ImageFolder(Dataset):
     
 class ListDataset(Dataset):
     '''
-        input: im_path pieces x1 y1 x2 y2 x3 y3 x4 y4 pieces......
+        input: im_name pieces x1 y1 x2 y2 x3 y3 x4 y4 pieces......
         return:
-            img_path, input_img, filled_labels[x1 y1 x2 y2 x3 y3 x4 y4 pieces...]
+            im_name, input_img, filled_labels[x1 y1 x2 y2 x3 y3 x4 y4 pieces...]
     '''
-    def __init__(self,list_path, img_size=416, transform=None, train=True):
+    def __init__(self,root, list_path, img_size=416, transform=None, train=True):
         with open(list_path,'r') as f:
             files = f.readlines()
             self.num_samples = len(files)
         files = [i.strip() for i in files]
-        self.img_files = [i.split(' ')[0] for i in files]
+        self.img_files = [os.path.join(root,i.split(' ')[0]) for i in files]
         self.label_files = [i.split(' ')[1:] for i in files]
         self.img_shape = (img_size, img_size)
         self.max_objects = 200
         self.transform = transform
         self.train = train
+        #self.root = root
         
     def __getitem__(self,index):
         #-----------
@@ -203,8 +174,8 @@ if __name__=="__main__":
     from config import ucas_config
 
 
-
-    ii = r'E:\遥感车辆数据集\DOTA\train\DOTA_train_order2.txt'
+    root = r'/home/ubantu/datasets/DOTA/train/images'
+    ii = r'/home/ubantu/datasets/DOTA/train_order.txt'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     transform = transforms.Compose([
     transforms.ToTensor(),
@@ -215,28 +186,31 @@ if __name__=="__main__":
     
     img_size = 416
    # model = yolov3(img_size,ucas_config['anchors'],1).cuda()
-    da = ListDataset(ii,transform=transform,img_size=img_size)
-    dataloader = torch.utils.data.DataLoader(da,batch_size=1,shuffle=0)
+    da = ListDataset(root, ii,transform=transform,img_size=img_size)
+    dataloader = torch.utils.data.DataLoader(da,batch_size=1,shuffle=1)
     
 # 
     for batch_i, (_, imgs, targets) in enumerate(dataloader):
       
 #        #loss = model(imgs.cuda(),targets.cuda())
 ##        break
+        imgs = imgs.squeeze(0).permute(1,2,0).numpy().copy()
         for i in range(80):
-            if i==2:
-                break
+#            if i==2:
+#                break
             if targets[0,i].sum() == 0:
                 break
             
             label = targets[0][i][0:-3].data.cpu().numpy()*img_size #中心坐标 + 宽高
             center = targets[0][i][-3:-1].data.cpu()*img_size
+            
+            
         
-        coor = label.reshape((-1,1,2)).astype(np.int32)
-        point = tuple((center.numpy().astype(np.int32)))
-        imgs = imgs.squeeze(0).permute(1,2,0).numpy().copy()
-        img = cv2.polylines(imgs, [coor],True, (0,0,255),thickness=4)
-        img = cv2.circle(imgs,point,1,(0,255,0),4)
+            coor = label.reshape((-1,1,2)).astype(np.int32)
+            point = tuple((center.numpy().astype(np.int32)))
+            
+            imgs = cv2.polylines(imgs, [coor],True, (0,0,255),thickness=4)
+            imgs = cv2.circle(imgs,point,1,(0,255,0),4)
         plt.imshow(imgs)
         
         break

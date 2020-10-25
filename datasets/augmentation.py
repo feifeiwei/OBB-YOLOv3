@@ -27,6 +27,8 @@ def resize(img, boxes, size, max_size=1000):
       boxes: (tensor) resized boxes.
     '''
     w, h = img.size
+    
+    boxes = torch.from_numpy(boxes).float()
     if isinstance(size, int):
         size_min = min(w,h)
         size_max = max(w,h)
@@ -40,13 +42,15 @@ def resize(img, boxes, size, max_size=1000):
         sw = float(ow) / w
         sh = float(oh) / h
     img = img.resize((ow,oh), Image.BILINEAR)
+    #import pdb
+    #pdb.set_trace()
     boxes[:,:-1] = boxes[:,:-1]*torch.Tensor([sw,sh,sw,sh,sw,sh,sw,sh,sw,sh])
     tmp_boxes = boxes[:,:8]
     
     for i, box in enumerate(tmp_boxes):
         box = box.reshape(-1,2)
         res = get_best_begin_point(box)
-        res = np.array(res).reshape(1,-1)[0]
+        res = torch.from_numpy(np.array(res).reshape(1,-1)[0])
         tmp_boxes[i] = res
     boxes[:,8] = tmp_boxes[:,[0,2,4,6]].sum(1) / 4.
     boxes[:,9] = tmp_boxes[:,[1,3,5,7]].sum(1) / 4.

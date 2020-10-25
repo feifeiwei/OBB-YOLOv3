@@ -21,7 +21,7 @@ class conv_bn(nn.Module):
         return F.leaky_relu(self.bn(self.conv(x)), negative_slope=0.1, inplace=True)
     
     
-class DarknetBlock(nn.Module):  #   1*1  减少通道�?  3*3增加通道
+class DarknetBlock(nn.Module):  
     def __init__(self,in_planes):
         super().__init__()
         mid_ch = in_planes // 2
@@ -68,15 +68,11 @@ class loss_layer(nn.Module):
         self.img_size = img_size
         
     def forward(self, fms, targets):
-        '''
-            fms:  ?, 255,13,13   / (26,26)/(52,52)
-            target:  ?,100,11
-        '''
         bs = fms.size(0)
         fm_size = fms.size(2)
         stride = self.img_size / fm_size
         scaled_anchors = [(a_w / stride, a_h / stride) for a_w, a_h in self.anchors]
-        # ?,3,13,13,25
+       
         prediction = fms.view(bs,  self.num_anchors, 
                                 self.bbox_attrs, fm_size, fm_size).permute(0, 1, 3, 4, 2).contiguous()
         
@@ -99,45 +95,33 @@ class loss_layer(nn.Module):
         
       
             #  build target
-        mask, conf_mask, tx, ty, tx1, ty1, tx2, ty2,tx3, ty3,tx4, ty4, tconf, tcls = get_target(targets, scaled_anchors,
+        obj_mask, noobj_mask, tx, ty, tx1, ty1, tx2, ty2,tx3, ty3,tx4, ty4, tconf, tcls = get_target(targets, scaled_anchors,
                                                                                                fm_size,
                                                                                                self.ignore_threshold,
                                                                                                self.num_classes)
-        mask, conf_mask = mask.byte().cuda(), conf_mask.byte().cuda()
+      
         tx, ty = tx.cuda(), ty.cuda()
         tx1, ty1, tx2, ty2, tx3, ty3, tx4, ty4 = tx1.cuda(), ty1.cuda(), tx2.cuda(), ty2.cuda(), tx3.cuda(), ty3.cuda(), tx4.cuda(), ty4.cuda()
         tconf, tcls = tconf.cuda(), tcls.long().cuda()
                                           
-        conf_mask_true = mask
-        conf_mask_false = conf_mask - mask
-                                  
-        #  losses.
-        loss_x = self.bce_loss(x[mask==1], tx[mask==1]) * self.lambda_xy
-        loss_y = self.bce_loss(y[mask==1], ty[mask==1]) * self.lambda_xy
+
+        loss_x = self.mse_loss(x[obj_mask==1], tx[obj_mask==1]) * self.lambda_xy
+        loss_y = self.mse_loss(y[obj_mask==1], ty[obj_mask==1]) * self.lambda_xy
         
-#        loss_x1 = self.mse_loss(x1[mask==1], tx1[mask==1]) * self.lambda_coors
-#        loss_y1 = self.mse_loss(y1[mask==1], ty1[mask==1]) * self.lambda_coors 
-#        loss_x2 = self.mse_loss(x2[mask==1], tx2[mask==1]) * self.lambda_coors
-#        loss_y2 = self.mse_loss(y2[mask==1], ty2[mask==1]) * self.lambda_coors 
-#        loss_x3 = self.mse_loss(x3[mask==1], tx3[mask==1]) * self.lambda_coors
-#        loss_y3 = self.mse_loss(y3[mask==1], ty3[mask==1]) * self.lambda_coors 
-#        loss_x4 = self.mse_loss(x4[mask==1], tx4[mask==1]) * self.lambda_coors
-#        loss_y4 = self.mse_loss(y4[mask==1], ty4[mask==1]) * self.lambda_coors 
         
-        loss_x1 = self.smmoth_l1_loss(x1[mask==1], tx1[mask==1]) * self.lambda_coors
-        loss_y1 = self.smmoth_l1_loss(y1[mask==1], ty1[mask==1]) * self.lambda_coors 
-        loss_x2 = self.smmoth_l1_loss(x2[mask==1], tx2[mask==1]) * self.lambda_coors
-        loss_y2 = self.smmoth_l1_loss(y2[mask==1], ty2[mask==1]) * self.lambda_coors 
-        loss_x3 = self.smmoth_l1_loss(x3[mask==1], tx3[mask==1]) * self.lambda_coors
-        loss_y3 = self.smmoth_l1_loss(y3[mask==1], ty3[mask==1]) * self.lambda_coors 
-        loss_x4 = self.smmoth_l1_loss(x4[mask==1], tx4[mask==1]) * self.lambda_coors
-        loss_y4 = self.smmoth_l1_loss(y4[mask==1], ty4[mask==1]) * self.lambda_coors 
+        loss_x1 = self.smmoth_l1_loss(x1[obj_mask==1], tx1[obj_mask==1]) * self.lambda_coors
+        loss_y1 = self.smmoth_l1_loss(y1[obj_mask==1], ty1[obj_mask==1]) * self.lambda_coors 
+        loss_x2 = self.smmoth_l1_loss(x2[obj_mask==1], tx2[obj_mask==1]) * self.lambda_coors
+        loss_y2 = self.smmoth_l1_loss(y2[obj_mask==1], ty2[obj_mask==1]) * self.lambda_coors 
+        loss_x3 = self.smmoth_l1_loss(x3[obj_mask==1], tx3[obj_mask==1]) * self.lambda_coors
+        loss_y3 = self.smmoth_l1_loss(y3[obj_mask==1], ty3[obj_mask==1]) * self.lambda_coors 
+        loss_x4 = self.smmoth_l1_loss(x4[obj_mask==1], tx4[obj_mask==1]) * self.lambda_coors
+        loss_y4 = self.smmoth_l1_loss(y4[obj_mask==1], ty4[obj_mask==1]) * self.lambda_coors 
         
-        loss_conf = self.bce_loss(conf[conf_mask_true], tconf[conf_mask_true]) +\
-                    self.bce_loss(conf[conf_mask_false], tconf[conf_mask_false])
-        #loss_cls = self.bce_loss(pred_cls[mask==1],tcls[mask==1]) * self.lambda_cls
+        loss_conf = self.bce_loss(conf[obj_mask==1], tconf[obj_mask==1]) +\
+                    self.bce_loss(conf[noobj_mask==1], tconf[noobj_mask==1])
         
-        loss_cls = self.ce_loss(pred_cls[mask==1],tcls[mask==1]) * self.lambda_cls
+        loss_cls = self.ce_loss(pred_cls[obj_mask==1],tcls[obj_mask==1]) * self.lambda_cls
         
         loss = loss_x  + loss_y  + loss_x1  + loss_y1 + loss_x2 + loss_y2 + loss_x3 + loss_y3 + loss_x4 + loss_y4 + loss_conf  + loss_cls 
 

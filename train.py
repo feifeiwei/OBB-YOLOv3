@@ -17,9 +17,9 @@ from datasets.datasets import ListDataset
 import torchvision.transforms as transforms
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--epochs', type=int, default=200, help='number of epochs')
+parser.add_argument('--epochs', type=int, default=27, help='number of epochs')
 parser.add_argument('--lr', type=int, default=1e-3, help='learing rate for training')
-parser.add_argument('--batch_size', type=int, default=46, help='size of each image batch')
+parser.add_argument('--batch_size', type=int, default=16, help='size of each image batch')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 opt = parser.parse_args()
 print(opt)
@@ -32,7 +32,7 @@ cfg = Dota_config
 
 os.makedirs('output',exist_ok=True)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device_ids = [3]
+device_ids = [0]
 
 model = yolov3(cfg['img_shape'], cfg['anchors'], cfg['num_classes'])
 optimizer = optim.SGD(model.parameters(),lr=learning_rate, momentum=0.9,weight_decay=5e-4)
@@ -46,7 +46,7 @@ if opt.resume:
 else:
     print('initial model from DarkNet..')
     start_epoch = 0
-    model.load_weights('./checkpoints/darkNet53.pth')
+    #model.load_weights('./checkpoints/darkNet53.pth')
     best_loss = float('inf')
     
 
@@ -59,7 +59,7 @@ transform = transforms.Compose([
     
     
 dataloader = torch.utils.data.DataLoader(
-        ListDataset(cfg['train_path'],img_size=cfg['img_shape'],
+        ListDataset(cfg['root'],cfg['train_path'],img_size=cfg['img_shape'],
                     transform=transform, train=True),
         batch_size=batch_size,
         shuffle=True,)
@@ -67,12 +67,12 @@ dataloader = torch.utils.data.DataLoader(
 
 
 testloader = torch.utils.data.DataLoader(
-        ListDataset(cfg['test_path'],img_size=cfg['img_shape'],
+        ListDataset(cfg['root'], cfg['test_path'],img_size=cfg['img_shape'],
                     transform=transform, train=False),
         batch_size=8,shuffle=False
         )
-print('training samples is %d'%(batch_size*len(dataloader)))
-print('testing samples is %d'%(8*len(testloader)))
+print('training samples are %d'%(batch_size*len(dataloader)))
+print('testing samples are %d'%(8*len(testloader)))
         
 
 
@@ -81,9 +81,11 @@ if len(device_ids) > 1:
     model = nn.DataParallel(model, device_ids=device_ids).to(device)
     optimizer = nn.DataParallel(optimizer, device_ids=device_ids)
 else:
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(device_ids[0])
+    #os.environ["CUDA_VISIBLE_DEVICES"] = str(device_ids[0])
     model = model.to(device)
 
+
+print("=> start training")
 for epoch in range(start_epoch,start_epoch+epochs):
     model.train()
     cur_loss = 0

@@ -3,23 +3,17 @@ import torch
 import numpy as np
 
 def predict_transform(fms, inp_dim, anchors, num_classes, cuda=False):
-    '''
-        ?x255x13x13,26x26,52x52    3*(11+80)=255
-    '''
-    stride =  inp_dim // fms.size(2)  #416// 13,26,52 = 32, 6, 8
+
+    stride =  inp_dim // fms.size(2)
     batch_size = fms.size(0)
-    bbox_attrs = 11 + num_classes                ##5+80 = 85
-    grid_size = inp_dim // stride               ###   13,26,52
-    #[(3.625, 2.8125), (4.875, 6.1875), (11.65625, 10.1875)]
+    bbox_attrs = 11 + num_classes               
+    grid_size = inp_dim // stride               
     anchors = [(a[0]/stride, a[1]/stride) for a in anchors]
-    num_anchors = len(anchors)                   # 3   1
-    # [?,255,169]///676,2704
+    num_anchors = len(anchors)                 
+  
     prediction = fms.view(batch_size, bbox_attrs*num_anchors,-1)
-    ##[?,169,255]
     prediction = prediction.transpose(1,2).contiguous()
-    
-    #[?,169*3,85]
-    prediction = prediction.view(batch_size, -1, bbox_attrs)   #?, 507,31
+    prediction = prediction.view(batch_size, -1, bbox_attrs)  
     
     #Sigmoid the  centre_X, centre_Y. and object confidencce  ##0-7  10 conf
     prediction[:,:,8] = torch.sigmoid(prediction[:,:,8])  #?,507
@@ -28,16 +22,16 @@ def predict_transform(fms, inp_dim, anchors, num_classes, cuda=False):
     
     #Add the center offsets
     grid_len = np.arange(grid_size)
-    a, b = np.meshgrid(grid_len,grid_len)  ##16*16,  16*16
+    a, b = np.meshgrid(grid_len,grid_len)
     
-    x_offset = torch.FloatTensor(a).view(-1,1) #0,1,2,3,...15..0,1,2
-    y_offset = torch.FloatTensor(b).view(-1,1) #0,0,0,0,0,0,...1,1,1,1...15,15,15
-    #[1,507,2]  ---> 2028, 8112
-    x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,num_anchors).view(-1,2).unsqueeze(0)  #1,768,2
+    x_offset = torch.FloatTensor(a).view(-1,1)
+    y_offset = torch.FloatTensor(b).view(-1,1) 
+   
+    x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,num_anchors).view(-1,2).unsqueeze(0) 
    
     #log space transform height and the width
-    anchors = torch.FloatTensor(anchors).repeat(1,4)#[1.25,1.625],[2,3.75],[4.125,2.875]
-    anchors = anchors.repeat(grid_size*grid_size,1).unsqueeze(0)##[507,2]->[1,507,2]
+    anchors = torch.FloatTensor(anchors).repeat(1,4)
+    anchors = anchors.repeat(grid_size*grid_size,1).unsqueeze(0)
     
     if cuda:
         x_y_offset = x_y_offset.cuda()
@@ -97,8 +91,12 @@ def get_target( target, anchors, g_dim, ignore_threshold, num_classes):
     nA = len(anchors)
     num_classes = num_classes
     
-    mask = torch.zeros(bs, nA, g_dim, g_dim)
-    conf_mask = torch.ones(bs, nA, g_dim, g_dim)
+    ByteTensor = torch.cuda.ByteTensor if target.is_cuda else torch.ByteTensor
+    #FloatTensor = torch.cuda.FloatTensor if target.is_cuda else torch.FloatTensor
+    
+    obj_mask  = ByteTensor(bs, nA, g_dim, g_dim).fill_(0)
+    noobj_mask  = ByteTensor(bs, nA, g_dim, g_dim).fill_(1)
+    
     
     tx = torch.zeros(bs, nA, g_dim, g_dim)
     ty = torch.zeros(bs, nA, g_dim, g_dim)
@@ -119,22 +117,22 @@ def get_target( target, anchors, g_dim, ignore_threshold, num_classes):
             if target[b, t].sum() == 0:
                 break
             # Convert to position relative to box
-            gx1 = target[b, t, 0] * g_dim
-            gy1 = target[b, t, 1] * g_dim
-            gx2 = target[b, t, 2] * g_dim
-            gy2 = target[b, t, 3] * g_dim
-            gx3 = target[b, t, 4] * g_dim
-            gy3 = target[b, t, 5] * g_dim
-            gx4 = target[b, t, 6] * g_dim
-            gy4 = target[b, t, 7] * g_dim
-            gx = target[b, t, 8] * g_dim
-            gy = target[b, t, 9] * g_dim
+            gx1 = target[b, t, 0].item() * g_dim
+            gy1 = target[b, t, 1].item() * g_dim
+            gx2 = target[b, t, 2].item() * g_dim
+            gy2 = target[b, t, 3].item() * g_dim
+            gx3 = target[b, t, 4].item() * g_dim
+            gy3 = target[b, t, 5].item() * g_dim
+            gx4 = target[b, t, 6].item() * g_dim
+            gy4 = target[b, t, 7].item() * g_dim
+            gx = target[b, t, 8].item() * g_dim
+            gy = target[b, t, 9].item() * g_dim
             # Get grid box indices
             gi = int(gx)
             gj = int(gy)
             
-            gw = max(target[b,t,[0,2,4,6]] * g_dim) - min(target[b,t,[0,2,4,6]] * g_dim)
-            gh = max(target[b,t,[1,3,5,7]] * g_dim) - min(target[b,t,[1,3,5,7]] * g_dim)
+            gw = max(target[b,t,[0,2,4,6]]).item() * g_dim - min(target[b,t,[0,2,4,6]]).item() * g_dim
+            gh = max(target[b,t,[1,3,5,7]]).item() * g_dim - min(target[b,t,[1,3,5,7]]).item() * g_dim
             # Get shape of gt box
             gt_box = torch.FloatTensor(np.array([0, 0, gw, gh])).unsqueeze(0)
             # Get shape of anchor box
@@ -142,42 +140,30 @@ def get_target( target, anchors, g_dim, ignore_threshold, num_classes):
                                                                   np.array(anchors)), 1))
             # Calculate iou between gt and anchor shapes
             anch_ious = bbox_iou(gt_box, anchor_shapes)
-            # Where the overlap is larger than threshold set mask to zero (ignore)
-            conf_mask[b, anch_ious > ignore_threshold, gj, gi] = 0
 
             # Find the best matching anchor box
             best_n = np.argmax(anch_ious)
-            # Masks
     
-            mask[b, best_n, gj, gi] = 1
-            conf_mask[b, best_n, gj, gi] = 1
+            obj_mask[b, best_n, gj, gi] = 1
+            noobj_mask[b, best_n, gj, gi] = 0
+            noobj_mask[b, anch_ious > ignore_threshold, gj, gi] = 0
+            
+            
             # Coordinates
             tx[b, best_n, gj, gi] = gx - gi
             ty[b, best_n, gj, gi] = gy - gj
-            # Width and height
-            
-            tx1[b, best_n, gj, gi] = torch.exp((gx1 - gi)/anchors[best_n][0] + 1e-16)
-            ty1[b, best_n, gj, gi] = torch.exp((gy1 - gj)/anchors[best_n][1] + 1e-16)
-            tx2[b, best_n, gj, gi] = torch.exp((gx2 - gi)/anchors[best_n][0] + 1e-16)
-            ty2[b, best_n, gj, gi] = torch.exp((gy2 - gj)/anchors[best_n][1] + 1e-16)
-            tx3[b, best_n, gj, gi] = torch.exp((gx3 - gi)/anchors[best_n][0] + 1e-16)
-            ty3[b, best_n, gj, gi] = torch.exp((gy3 - gj)/anchors[best_n][1] + 1e-16)
-            tx4[b, best_n, gj, gi] = torch.exp((gx4 - gi)/anchors[best_n][0] + 1e-16)
-            ty4[b, best_n, gj, gi] = torch.exp((gy4 - gj)/anchors[best_n][1] + 1e-16)
-#            
-#            tx1[b, best_n, gj, gi] = (gx1 - gi) / anchors[best_n][0]
-#            ty1[b, best_n, gj, gi] = (gy1 - gj) / anchors[best_n][1]
-#            tx2[b, best_n, gj, gi] = (gx2 - gi) / anchors[best_n][0]
-#            ty2[b, best_n, gj, gi] = (gy2 - gj) / anchors[best_n][1]
-#            tx3[b, best_n, gj, gi] = (gx3 - gi) / anchors[best_n][0]
-#            ty3[b, best_n, gj, gi] = (gy3 - gj) / anchors[best_n][1]
-#            tx4[b, best_n, gj, gi] = (gx4 - gi) / anchors[best_n][0]
-#            ty4[b, best_n, gj, gi] = (gy4 - gj) / anchors[best_n][1]
+
+            tx1[b, best_n, gj, gi] = (gx1 - gi) / anchors[best_n][0]
+            ty1[b, best_n, gj, gi] = (gy1 - gj) / anchors[best_n][1]
+            tx2[b, best_n, gj, gi] = (gx2 - gi) / anchors[best_n][0]
+            ty2[b, best_n, gj, gi] = (gy2 - gj) / anchors[best_n][1]
+            tx3[b, best_n, gj, gi] = (gx3 - gi) / anchors[best_n][0]
+            ty3[b, best_n, gj, gi] = (gy3 - gj) / anchors[best_n][1]
+            tx4[b, best_n, gj, gi] = (gx4 - gi) / anchors[best_n][0]
+            ty4[b, best_n, gj, gi] = (gy4 - gj) / anchors[best_n][1]
             
             # object
             tconf[b, best_n, gj, gi] = 1
-            # One-hot encoding of label
-            #tcls[b, best_n, gj, gi, int(target[b, t, 10])] = 1
             tcls[b, best_n, gj, gi] = int(target[b, t, 10])
             
-    return mask, conf_mask, tx, ty, tx1, ty1, tx2, ty2,tx3, ty3,tx4, ty4, tconf, tcls   
+    return obj_mask, noobj_mask, tx, ty, tx1, ty1, tx2, ty2,tx3, ty3,tx4, ty4, tconf, tcls   

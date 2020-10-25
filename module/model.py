@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from .layers import conv_bn,DarknetBlock,detect_layer, loss_layer
+import pdb
 
 # kaiming_weights_init
 def weights_init(m):
@@ -21,6 +22,7 @@ class Darknet53(nn.Module):
     def __init__(self, num_blocks):
         super(Darknet53,self).__init__()
         self.conv = conv_bn(3, 32, kernel=3, stride=1, padding=1)
+        
         self.layer1 = self._make_layer(32, num_blocks[0], stride=2)
         self.layer2 = self._make_layer(64, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(128, num_blocks[2], stride=2)
@@ -34,7 +36,9 @@ class Darknet53(nn.Module):
         return nn.Sequential(*layers) 
 
     def forward(self, x):
+        #pdb.set_trace()
         out = self.conv(x)
+        
         c1 = self.layer1(out)
         c2 = self.layer2(c1)
         c3 = self.layer3(c2)
@@ -47,6 +51,7 @@ class yolo(nn.Module):
     def __init__(self,num_blocks, anchors, input_dim, num_classes,use_cuda=False):
         super(yolo,self).__init__()
         self.extractor = Darknet53(num_blocks)
+        #pdb.set_trace()
         self.predict_conv_list1 = nn.ModuleList(predict_conv_list1(num_classes))
         self.predict_conv_list2 = nn.ModuleList(predict_conv_list2(num_classes))
         self.predict_conv_list3 = nn.ModuleList(predict_conv_list3(num_classes))
@@ -65,31 +70,32 @@ class yolo(nn.Module):
         return nn.Sequential(*layers)
     def forward(self,x, target=None):
         c3, c4, c5 = self.extractor(x)
+        #pdb.set_trace()
         
-        x = c5                   #1,1024,13,13
+        x = c5                 
         for i in range(5):
-            x = self.predict_conv_list1[i](x)   #1,512,13,13
-        sm1 = self.smooth_conv1(x)  #1,256,13,13
-        sm1 = F.upsample(sm1,scale_factor=2, mode='nearest') #1,125,26,26
-        sm1 = torch.cat((sm1,c4),1) # 1,768,26,26
+            x = self.predict_conv_list1[i](x)  
+        sm1 = self.smooth_conv1(x)  
+        sm1 = F.upsample(sm1,scale_factor=2, mode='nearest') 
+        sm1 = torch.cat((sm1,c4),1) 
         for i in range(5,7):
             x = self.predict_conv_list1[i](x)
-        out1 = x                                    ## #   #1,255,13,13
+        out1 = x                                   
         
-        x = sm1    #1,768,26,26
+        x = sm1    
         for i in range(5):
-            x = self.predict_conv_list2[i](x)  # 1,256,26,26
-        sm2 = self.smooth_conv2(x)  #1,128,26,26
-        sm2 = F.upsample(sm2,scale_factor=2)  #1,128,52,52
-        sm2 = torch.cat((sm2,c3),1)            #1,384,52,52
+            x = self.predict_conv_list2[i](x)  
+        sm2 = self.smooth_conv2(x)  
+        sm2 = F.upsample(sm2,scale_factor=2)  
+        sm2 = torch.cat((sm2,c3),1)           
         for i in range(5,7):
             x = self.predict_conv_list2[i](x)
-        out2 = x                                        #  #1,255,26,26
+        out2 = x                                      
         
-        x = sm2   # 1,384,52,52
+        x = sm2   
         for i in range(7):
             x = self.predict_conv_list3[i](x)
-        out3 = x                                                  #1,255,52,52
+        out3 = x                                                 
         
         if target is None:
             detections = self.detection(out1,out2,out3)
@@ -165,6 +171,4 @@ if __name__=="__main__":
     shape = 416
     x = torch.randn(1,3,shape,shape)
     n = yolov3(shape, anchors, 20, cuda=False)
-#    n.load_weights('./weights/darkNet53.pth')
-    #n.load_state_dict(torch.load('./weights/convert_yolov3_coco.pth'))
-    y = n(x)  ###### Size([2, 10647, 25])
+    y = n(x) 

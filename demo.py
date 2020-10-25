@@ -27,7 +27,7 @@ from config import *
 import torchvision.transforms as transforms
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--conf_thres', type=float, default=0.9, help='object confidence threshold')
+parser.add_argument('--conf_thres', type=float, default=0.5, help='object confidence threshold')
 parser.add_argument('--nms_thres', type=float, default=0.1, help='iou thresshold for non-maximum suppression')
 parser.add_argument('--batch_size', type=int, default=1, help='size of the batches')
 
@@ -54,8 +54,8 @@ transform = transforms.Compose([
     transforms.Normalize((0.485,0.456,0.406), (0.229,0.224,0.225))
 ])
 
-dataloader = DataLoader(ImageFolder(cfg['test_path'], img_size=cfg['img_shape'],transform=transform),
-                        batch_size=opt.batch_size, shuffle=False)
+dataloader = DataLoader(ImageFolder(cfg['test_root'], cfg['test_path'], img_size=cfg['img_shape'],transform=transform),
+                        batch_size=opt.batch_size, shuffle=True)
 
 
 classes = ['b','s']  # Extracts class labels from file
@@ -85,7 +85,8 @@ for batch_i, (img_paths, input_imgs) in enumerate(dataloader):
     # Save image and detections
     imgs.extend(img_paths)
     img_detections.extend(detections)
-    break
+    if batch_i == 100:
+        break
     
 # Bounding-box colors
 cmap = plt.get_cmap('tab20b')
@@ -100,7 +101,7 @@ for img_i, (path, detections) in enumerate(zip(imgs, img_detections)):
     print ("(%d) Image: '%s'" % (img_i, path))
     # Create plot
     img = np.array(Image.open(path))
-    img_name = path.split(" ")[0].split("\\")[-1]
+    img_name = path.split(" ")[0].split("/")[-1]
     
     pad_x = max(img.shape[0] - img.shape[1],0) * (cfg['img_shape'] / max(img.shape))
     pad_y = max(img.shape[1] - img.shape[0],0) * (cfg['img_shape'] / max(img.shape))
@@ -129,7 +130,7 @@ for img_i, (path, detections) in enumerate(zip(imgs, img_detections)):
             
             #cv2.putText(img, classes[int(label)], tuple(coor[0][0]), cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5, color=color)
             
-        cv2.imwrite(r'output\%s'%(img_name), img)
+        cv2.imwrite(r'output/%s'%(img_name), img)
             
         
 
